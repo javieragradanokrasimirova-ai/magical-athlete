@@ -1,5 +1,5 @@
 // API de salas de Magical Athlete: Cloudflare Worker + D1 (nivel gratuito).
-import { createGame, act, publicGame } from '../../src/lib/engine';
+import { createGame, act, publicGame, MIN_PLAYERS, MAX_PLAYERS, type Game } from '../../src/lib/engine';
 
 interface Env { DB: D1Database }
 
@@ -15,7 +15,97 @@ const json=(body:any,status=200)=>Response.json(body,{status,headers:{'Cache-Con
 async function hash(s:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(x=>x.toString(16).padStart(2,'0')).join('')}
 const token=()=>crypto.randomUUID()+crypto.randomUUID();
 
-async function room(req:Request, env:Env){try{const raw=await req.text();if(raw.length>4096)return json({error:'Petición demasiado grande'},413);const b=JSON.parse(raw);const db=env.DB;if(!db)return json({error:'Las salas todavía no están disponibles.'},503);if(b.type==='create'){const code=crypto.randomUUID().replace(/-/g,'').slice(0,12).toUpperCase(),key=token();const s=createGame([String(b.name||'Jugador 1').slice(0,30),'Jugador 2'],crypto.getRandomValues(new Uint32Array(1))[0]);await db.prepare('DELETE FROM rooms WHERE expires<?').bind(Date.now()).run();await db.prepare('INSERT INTO rooms (code,state,host,revision,expires) VALUES (?,?,?,0,?)').bind(code,JSON.stringify(s),await hash(key),Date.now()+7*86400000).run();return json({code,key,owner:0,game:publicGame(s,0),joined:false})}if(typeof b.code!=='string'||!/^[A-F0-9]{12}$/.test(b.code))return json({error:'Código no válido'},400);const room:any=await db.prepare('SELECT * FROM rooms WHERE code=?').bind(b.code).first();if(!room||room.expires<Date.now())return json({error:'La sala no existe o ha caducado'},404);if(b.type==='join'){if(room.guest)return json({error:'La sala ya tiene dos jugadores. Usa el dispositivo con el que entraste.'},409);const key=token(),s=JSON.parse(room.state);s.names[1]=String(b.name||'Jugador 2').slice(0,30);s.version++;const result=await db.prepare('UPDATE rooms SET guest=?,state=?,revision=revision+1 WHERE code=? AND guest IS NULL AND revision=?').bind(await hash(key),JSON.stringify(s),b.code,room.revision).run();if(!result.meta.changes)return json({error:'La sala ha cambiado. Inténtalo otra vez.'},409);return json({code:b.code,key,owner:1,game:publicGame(s,1),joined:true})}const h=await hash(String(b.key||'')),owner=h===room.host?0:h===room.guest?1:-1;if(owner<0)return json({error:'No tienes acceso a esta partida'},403);let s=JSON.parse(room.state);if(b.type==='act'){if(!room.guest)return json({error:'Espera a que entre tu pareja'},409);if(b.version!==s.version)return json({error:'La partida ha cambiado; vuelve a intentarlo'},409);s=act(s,owner,b.action);const result=await db.prepare('UPDATE rooms SET state=?,revision=revision+1 WHERE code=? AND revision=?').bind(JSON.stringify(s),b.code,room.revision).run();if(!result.meta.changes)return json({error:'Otra acción llegó antes; vuelve a intentarlo'},409)}else if(b.type!=='poll')return json({error:'Acción desconocida'},400);return json({game:publicGame(s,owner),joined:!!room.guest})}catch(e:any){return json({error:e.message||'No se pudo completar la acción'},400)}}
+interface StoredRoom {
+ code: string;
+ state: string;
+ host: string;
+ guest: string | null;
+ revision: number;
+ expires: number;
+}
+
+function guestHashes(value: string | null): string[] {
+ if (!value) return [];
+ return value.startsWith('[') ? JSON.parse(value) : [value];
+}
+
+function playerName(value: unknown, owner: number) {
+ return (typeof value === 'string' && value.trim().slice(0, 30)) || `Jugador ${owner + 1}`;
+}
+
+function roomView(game: Game, owner: number, guests: string[]) {
+ const seats = game.names.slice(0, guests.length + 1);
+ return { game: publicGame(game, owner), seats, joined: seats.length === game.names.length };
+}
+
+async function room(req: Request, env: Env) {
+ try {
+  const raw = await req.text();
+  if (raw.length > 4096) return json({error:'Petición demasiado grande'}, 413);
+  const body = JSON.parse(raw);
+  const db = env.DB;
+  if (!db) return json({error:'Las salas todavía no están disponibles.'}, 503);
+
+  if (body.type === 'create') {
+   const size = body.size ?? 2;
+   if (!Number.isInteger(size) || size < MIN_PLAYERS || size > MAX_PLAYERS) {
+    return json({error:'La sala admite de 2 a 6 jugadores'}, 400);
+   }
+   const code = crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase();
+   const key = token();
+   const names = Array.from({length: size}, (_, i) => playerName(i === 0 ? body.name : undefined, i));
+   const game = createGame(names, crypto.getRandomValues(new Uint32Array(1))[0], body.doubleRacers === true);
+   await db.prepare('DELETE FROM rooms WHERE expires<?').bind(Date.now()).run();
+   await db.prepare('INSERT INTO rooms (code,state,host,revision,expires) VALUES (?,?,?,0,?)')
+    .bind(code, JSON.stringify(game), await hash(key), Date.now() + 7 * 86400000).run();
+   return json({code, key, owner:0, ...roomView(game, 0, [])});
+  }
+  if (typeof body.code !== 'string' || !/^[A-F0-9]{12}$/.test(body.code)) {
+   return json({error:'Código no válido'}, 400);
+  }
+
+  const key = body.type === 'join' ? token() : String(body.key || '');
+  const hashedKey = await hash(key);
+  for (let attempt = 0; attempt < MAX_PLAYERS; attempt++) {
+   const stored = await db.prepare('SELECT * FROM rooms WHERE code=?').bind(body.code).first<StoredRoom>();
+   if (!stored || stored.expires < Date.now()) return json({error:'La sala no existe o ha caducado'}, 404);
+   const guests = guestHashes(stored.guest);
+   const game: Game = JSON.parse(stored.state);
+
+   if (body.type === 'join') {
+    const owner = guests.length + 1;
+    if (owner >= game.names.length) return json({error:'La sala ya está completa'}, 409);
+    guests.push(hashedKey);
+    game.names[owner] = playerName(body.name, owner);
+    game.version++;
+    const guest = game.names.length === 2 ? guests[0] : JSON.stringify(guests);
+    const result = await db.prepare('UPDATE rooms SET guest=?,state=?,revision=revision+1 WHERE code=? AND revision=?')
+     .bind(guest, JSON.stringify(game), body.code, stored.revision).run();
+    if (result.meta.changes) return json({code:body.code, key, owner, ...roomView(game, owner, guests)});
+    continue;
+   }
+
+   const guestIndex = guests.indexOf(hashedKey);
+   const owner = hashedKey === stored.host ? 0 : guestIndex < 0 ? -1 : guestIndex + 1;
+   if (owner < 0) return json({error:'No tienes acceso a esta partida'}, 403);
+   if (body.type === 'poll') return json(roomView(game, owner, guests));
+   if (body.type !== 'act') return json({error:'Acción desconocida'}, 400);
+   if (guests.length + 1 < game.names.length) return json({error:'Espera a que se complete la sala'}, 409);
+   const simultaneousPick = body.action?.type === 'select' && game.phase === 'select' && body.action.round === game.round;
+   if (body.version !== game.version && !simultaneousPick) {
+    return json({error:'La partida ha cambiado. Vuelve a intentarlo.'}, 409);
+   }
+   const next = act(game, owner, body.action);
+   const result = await db.prepare('UPDATE rooms SET state=?,revision=revision+1 WHERE code=? AND revision=?')
+    .bind(JSON.stringify(next), body.code, stored.revision).run();
+   if (result.meta.changes) return json(roomView(next, owner, guests));
+   if (!simultaneousPick) break;
+  }
+  return json({error:'La partida ha cambiado. Vuelve a intentarlo.'}, 409);
+ } catch (error) {
+  return json({error:error instanceof Error ? error.message : 'No se pudo completar la acción'}, 400);
+ }
+}
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {

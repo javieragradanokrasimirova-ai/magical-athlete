@@ -3,7 +3,7 @@ import ts from 'typescript';import fs from 'node:fs';import assert from 'node:as
 fs.writeFileSync('.test-build/presentation.mjs',ts.transpileModule(fs.readFileSync('src/lib/presentation.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace("'./engine'","'./engine.mjs'").replace("'./racers'","'./racers.mjs'"));
 const {createGame,act}=await import('../.test-build/engine.mjs');
 const {place,racePoints,movementHints,lastRoll,lastTurnRunner}=await import('../.test-build/presentation.mjs');
-function race(){const s=createGame(['A','B'],123);s.phase='race';s.owner=0;s.runners=['banana','legs','blimp','gunk'].map((id,i)=>({id,owner:i<2?0:1,pos:0,trip:false,out:false,finished:false,power:id,first:true}));return s}
+function race(){const s=createGame(['A','B'],123);delete s.racersPerPlayer;s.phase='race';s.owner=0;s.runners=['banana','legs','blimp','gunk'].map((id,i)=>({id,owner:i<2?0:1,pos:0,trip:false,out:false,finished:false,power:id,first:true}));return s}
 let g=race();assert.equal(place(g,g.runners[0]),'1º =');g.runners[0].pos=5;assert.equal(place(g,g.runners[0]),'1º');assert.equal(place(g,g.runners[1]),'2º =');
 const quick=act(race(),0,{type:'runner',id:'banana',quick:true});assert.ok(quick.log.some(s=>s.includes(' saca ')));assert.ok(!quick.choice);
 const optional=act(race(),0,{type:'runner',id:'legs',quick:true});assert.equal(optional.roll,null);assert.equal(optional.choice.options.length,2);

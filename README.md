@@ -1,6 +1,6 @@
 # Magical Athlete
 
-Adaptación web **no oficial** del juego de carreras Magical Athlete para dos jugadores: 36 atletas, draft con selecciones ocultas, cuatro carreras con poderes y eventos, tablero en 3D o plano, y partidas en una misma pantalla o en **salas remotas** con un código.
+Adaptación web **no oficial** del juego de carreras Magical Athlete para dos a seis jugadores: 36 atletas, draft con selecciones ocultas, cuatro carreras con poderes y eventos, tablero en 3D o plano, y partidas en una misma pantalla o en **salas remotas** con un código.
 
 **Jugar:** https://javieragradanokrasimirova-ai.github.io/magical-athlete/
 
@@ -10,7 +10,7 @@ Adaptación web **no oficial** del juego de carreras Magical Athlete para dos ju
 
 - **Web estática** (React 19 + TypeScript + Vite, tablero 3D con three.js) publicada en GitHub Pages.
 - **Salas remotas:** un Cloudflare Worker con base de datos D1 (nivel gratuito) en `worker/`. La web consulta cada pocos segundos; el servidor valida cada jugada con el mismo motor de reglas (`src/lib/engine.ts`) y guarda el estado. No hay cuentas: se entra con un nombre y las salas caducan a los 7 días.
-- **Motor de reglas determinista** con pruebas: `npm test` simula 150 partidas completas.
+- **Motor de reglas determinista** con pruebas: `npm test` simula 180 partidas completas en seis formatos (incluida la variante doble a tres).
 
 ## Desarrollo
 

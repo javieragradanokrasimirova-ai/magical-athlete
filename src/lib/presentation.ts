@@ -44,3 +44,5 @@ export function racePoints(g:Game,owner:number){
  const total=g.scores[owner]-g.roundScores[owner];
  return {medals,other:total-medals,total};
 }
+
+export const seatColors=['#d43c26','#793ec1','#54801d','#267eb2','#b83878','#9e650d'];
