@@ -74,7 +74,7 @@ export default function RaceView({game,owner,online=false,canAct,busy,action,ins
  const roll=lastRoll(g);
  const announcement=result?'Carrera terminada.':`${playing?'Jugada':'Turno'} de ${game.names[turn]}.${roll?` Última tirada: ${game.names[roll.owner]}, ${card(roll.runnerId).name}, ${roll.value}.`:''}`;
  async function activate(id:string){await action({type:'runner',id,quick:true})}
- return <section className={`race-experience ${reduced?'reduce-motion':''} ${fast?'fast-motion':''}`}>
+ return <section className={`race-experience ${g.round%2?'wild-track':'mild-track'} ${reduced?'reduce-motion':''} ${fast?'fast-motion':''}`}>
  <div className="race-toolbar"><div className="race-progress" aria-label={`Carrera ${g.round+1} de 4`}>{[0,1,2,3].map(n=><span key={n} aria-current={n===g.round?'step':undefined} className={n===g.round?'current':n<g.round?'complete':''}>{n<g.round?'✓':n+1}<small>{n%2?'WILD':'MILD'}</small></span>)}</div><div className="playback-settings">{playing?<button onClick={skip}><SkipForward size={15} aria-hidden="true"/> Saltar secuencia</button>:canReplay&&!reduced&&<button onClick={replay}><RotateCcw size={15} aria-hidden="true"/> Repetir jugada</button>}<button onClick={()=>setFast(!fast)} aria-pressed={fast} title="Velocidad de las animaciones"><Gauge size={15} aria-hidden="true"/>{fast?'Rápido':'Normal'}</button><button onClick={()=>setReduced(!reduced)} aria-pressed={!reduced}><Sparkles size={15} aria-hidden="true"/>{reduced?'Activar animaciones':'Animaciones activas'}</button></div></div>
  <p className="race-sr-only" role="status" aria-atomic="true">{announcement}</p>
  <div className={`turn-ribbon player-${turn} ${!playing&&!result?'turn-ready':''}`}>
@@ -83,7 +83,17 @@ export default function RaceView({game,owner,online=false,canAct,busy,action,ins
   <div className="ribbon-points">{g.names.map((n,i)=><span key={i} className={`player-${i} ${i===turn&&!result?'score-in-turn':''}`}><small>{n}</small><b><Counter value={g.scores[i]}/><em> pts</em></b></span>)}</div>
  </div>
  <div className="race-arena"><div className={`board-column ${zoom?'board-zoomed':''}`}><div className="board-controls"><span><i className="dot"/>{g.round%2?'WILD WILDS · CIRCUITO CON SORPRESAS':'MILD MILE · CIRCUITO CLÁSICO'}</span><button onClick={()=>setZoom(!zoom)} aria-pressed={zoom}>{zoom?<Minimize2 size={15} aria-hidden="true"/>:<Maximize2 size={15} aria-hidden="true"/>}{zoom?'Ajustar':'Ampliar'}</button></div><Board game={g} inspect={inspect} effect={effect} reduced={reduced} fast={fast} follow={zoom}/><div className={`event-cue cue-${effect}`}><span className="cue-symbol">{effect==='roll'?'⚄':effect==='trip'?'↯':effect==='finish'?'★':effect==='warp'?'✧':'↗'}</span><span key={cue}>{cue||'Pasa el cursor o pulsa una ficha para consultar su poder.'}</span>{playing&&<span className="activity-dots"><i/><i/><i/></span>}</div>
- <div className="lineup-heading"><h2><Flag size={16} aria-hidden="true"/> En pista</h2><span>Clasificación en directo · pulsa para ver poderes</span></div><div className="race-lineup">{ranked.map((r,i)=><button onClick={()=>inspect(r.id)} key={r.id} className={`runner-tile player-${r.owner} ${g.active===r.id?'runner-active':''} ${r.out?'runner-out':''}`}><span className="runner-rank">{r.out?'×':place(g,r)}</span><img src={artwork(r.id)} alt=""/><span><strong>{card(r.id).name}</strong><small>{g.names[r.owner]}</small></span><b className={`runner-status ${r.trip?'is-tripped':''}`}>{r.out?'Fuera':r.finished?'Meta':r.trip?'Caído':`Casilla ${r.pos} / 30`}</b><span className="runner-meter"><i style={{width:`${r.pos/30*100}%`}}/></span></button>)}</div></div>
+ <div className="lineup">
+  <div className="lineup-heading"><h2><Flag size={20} aria-hidden="true"/> En pista</h2></div>
+  <div className="race-lineup">{ranked.map(r=><button type="button" onClick={()=>inspect(r.id)} key={r.id}
+   className={'runner-tile player-'+r.owner+(g.active===r.id?' runner-active':'')+(r.out?' runner-out':'')}>
+   <span className="runner-rank">{r.out?'×':place(g,r)}</span>
+   <img src={artwork(r.id)} alt=""/>
+   <span className="runner-name"><strong>{card(r.id).name}</strong><small>{g.names[r.owner]}</small></span>
+   <span className={'runner-status'+(r.trip?' is-tripped':'')}>{r.out?'Fuera':r.finished?'Meta':r.trip?'Caído':'Casilla '+r.pos+' / 30'}</span>
+   <span className="runner-meter" aria-hidden="true"><i style={{width:(r.pos/30*100)+'%'}}/></span>
+  </button>)}</div>
+ </div></div>
  <aside aria-label="Decisiones de carrera" className={`decision-panel player-${turn} ${result?'result-panel':''}`}><div className="decision-eyebrow">{result?'LA LÍNEA DE META':`${playing?'JUGADA DE':online?(canAct?'TE TOCA':'ESPERANDO A'):'TURNO DE'} ${game.names[turn]}`}</div>{active&&!result&&<button className="active-portrait" onClick={()=>inspect(active.id)}><img src={artwork(active.id)} alt={card(active.id).name}/><span>Consultar poder ↗</span></button>}<h2>{heading}</h2>
  {!result&&powerRunner&&<div className="power-context"><b>{card(powerRunner.id).name}{powerId!==powerRunner.id&&card(powerId)?` · ${card(powerId).name}`:''}</b><p>{card(powerId)?.power||card(powerRunner.id).power}</p>{hints.length>0&&<div className="move-modifiers"><span>Movimiento principal</span>{hints.map((h,i)=><b key={i} className={h.value<0?'negative':''}>{h.value>0?'+':''}{h.value} {h.name}</b>)}</div>}</div>}
  {!result&&(playing||!!game.choice)&&<Dice value={dieValue} rollKey={rollKey} rolling={playing&&effect==='roll'} onRoll={canRoll?()=>action({type:'choice',index:rollIndex}):undefined}/>}

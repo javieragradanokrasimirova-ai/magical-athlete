@@ -1,6 +1,6 @@
 import {useEffect,useState,type CSSProperties,type ReactNode} from 'react';
-import {ArrowRight,BookOpen,Check,Copy,Dices,Flag,Layers,Users,X} from 'lucide-react';
-import {RACERS,card,artwork} from './lib/racers';
+import {ArrowRight,BookOpen,Check,Copy,Flag,Layers,Users,X} from 'lucide-react';
+import {RACERS,card,artwork,asset} from './lib/racers';
 import {createGame,act,actor,racersNeeded,MIN_PLAYERS,MAX_PLAYERS,type Game} from './lib/engine';
 import RaceView from './RaceView';
 
@@ -160,10 +160,7 @@ export default function App(){
    <div className="cover">
     <span className="cover-format"><Users size={17}/> 2–6 jugadores <span>·</span> 4 carreras</span>
     <h1><span>Magical</span><span>Athlete</span></h1>
-    <div className="cover-art" aria-hidden="true">
-     <img src={artwork('party')} alt="" className="racer-left"/><img src={artwork('banana')} alt="" className="racer-middle"/>
-     <img src={artwork('toad')} alt="" className="racer-right"/><Dices className="cover-dice"/>
-    </div>
+    <img className="cover-art" src={asset('rulebook-cover-racers.webp')} alt="" width={707} height={372}/>
     <div className="cover-stripe" aria-hidden="true"/>
    </div>
    <section className="start-panel" aria-labelledby="new-game">
@@ -239,7 +236,7 @@ export default function App(){
    </>}
   </>}
   <footer><span>Magical Athlete</span>
-   <p className="legal">Adaptación digital no oficial y sin ánimo de lucro. Diseño original de Takashi Ishida, revisión de Richard Garfield e ilustraciones de Angela Kirkwood. Edición de CMYK. Los derechos del juego y sus ilustraciones pertenecen a sus respectivos titulares. Esta web funciona de forma independiente.</p>
+   <p className="legal">Adaptación digital no oficial y sin ánimo de lucro. Diseño original de Takashi Ishida, revisión de Richard Garfield e ilustraciones de Angela Kirkwood. Diseño gráfico de Elizabeth Goodspeed. Edición de CMYK. Los derechos del juego y sus ilustraciones pertenecen a sus respectivos titulares. Esta web funciona de forma independiente.</p>
    <button onClick={()=>setModal('rules')}>Reglas y créditos <ArrowRight size={15}/></button></footer>
   {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice('')} aria-label="Cerrar aviso"><X size={19}/></button></div>}
   {curtain&&!home&&g?.phase==='select'&&<Dialog title={`Pasa la pantalla a ${g.names[owner]}`}>
