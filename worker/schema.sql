@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS rooms (
+  code TEXT PRIMARY KEY NOT NULL,
+  state TEXT NOT NULL,
+  host TEXT NOT NULL,
+  guest TEXT,
+  revision INTEGER NOT NULL DEFAULT 0,
+  expires INTEGER NOT NULL
+);

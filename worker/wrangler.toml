@@ -1,0 +1,9 @@
+name = "magical-athlete-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "magical-athlete"
+database_id = "e73a700f-2968-461e-b6bc-9b10d6bd1b0b"
+preview_urls = false
