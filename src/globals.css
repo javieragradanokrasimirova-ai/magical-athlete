@@ -111,13 +111,49 @@ h1,h2,h3,p,fieldset { margin:0 }
 .racer-card {
  display:flex; flex-direction:column; text-align:left; overflow:hidden; min-width:0; padding:0; position:relative;
  border:2px solid var(--ink); border-radius:14px; background:var(--white); box-shadow:3px 4px 0 var(--ink);
- transition:transform .15s,box-shadow .15s;
 }
-.racer-card:hover { transform:translateY(-4px) rotate(-1deg); box-shadow:4px 7px 0 var(--ink) }
+.racer-card:focus-visible,.racer-card:active {
+ z-index:1;
+ --card-highlight:color-mix(in srgb,var(--card),white 22%);
+}
+@media (hover:hover) and (pointer:fine) {
+ .racer-card:hover {
+  z-index:1;
+  --card-highlight:color-mix(in srgb,var(--card),white 22%);
+ }
+}
+@media (prefers-reduced-motion:no-preference) {
+ .racer-card {
+  translate:0 var(--card-lift,0px);
+  rotate:var(--card-tilt,0deg);
+  scale:var(--card-press,1);
+  transition:translate .21s cubic-bezier(.2,.8,.3,1), rotate .21s ease-out, scale .14s ease-out;
+ }
+ .racer-card:focus-visible {
+  --card-lift:-6px;
+  --portrait-zoom:1.07;
+ }
+ .racer-card:active {
+  --card-press:.98;
+ }
+ .racer-card .portrait {
+  transform:scale(var(--portrait-zoom,1));
+  transition:transform .24s cubic-bezier(.2,.75,.3,1);
+ }
+}
+@media (prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine) {
+ .racer-card:hover {
+  --card-lift:-7px;
+  --card-tilt:-1.5deg;
+  --portrait-zoom:1.07;
+ }
+ .racer-card:nth-child(even):hover { --card-tilt:1.5deg; }
+}
 .racer-card strong {
  display:flex; align-items:center; width:100%; min-height:43px; padding:7px 9px; border-bottom:2px solid var(--ink);
- background:var(--card); font:900 clamp(17px,1.8vw,25px)/1.02 var(--display); text-transform:uppercase;
+ background:var(--card-highlight,var(--card)); font:900 clamp(17px,1.8vw,25px)/1.02 var(--display); text-transform:uppercase;
 }
+.portrait-frame { display:block; width:100%; overflow:hidden; }
 .portrait { display:block; width:100%; aspect-ratio:1.22; object-fit:cover; object-position:center; background:var(--card) }
 .power { width:100%; padding:10px; border-top:2px solid var(--ink); font-size:13px; line-height:1.4 }
 .racer-card.selected { box-shadow:0 0 0 4px var(--ink),0 0 0 7px var(--green); }

@@ -26,7 +26,8 @@ function RacerCard({id,onClick,selected,order,compact=false}:{
  const racer=card(id);
  return <button className={`racer-card ${compact?'compact':''} ${selected?'selected':''}`}
   style={{'--card':racer.color} as CSSProperties} onClick={onClick} aria-pressed={selected}>
-  <strong>{racer.name}</strong><img className="portrait" src={artwork(id)} alt="" loading="lazy" decoding="async"/>
+  <strong>{racer.name}</strong>
+  <span className="portrait-frame"><img className="portrait" src={artwork(id)} alt="" loading="lazy" decoding="async"/></span>
   {!compact&&<span className="power">{racer.power}</span>}
   {!!order&&<b className="check" aria-label={`Orden ${order}`}>{order}</b>}
  </button>;
