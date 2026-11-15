@@ -17,7 +17,7 @@ const token=()=>crypto.randomUUID()+crypto.randomUUID();
 
 interface StoredRoom {
  code: string;
- state: string;
+ state: string | null;
  host: string;
  guest: string | null;
  revision: number;
@@ -33,9 +33,9 @@ function playerName(value: unknown, owner: number) {
  return (typeof value === 'string' && value.trim().slice(0, 30)) || `Jugador ${owner + 1}`;
 }
 
-function roomView(game: Game, owner: number, guests: string[]) {
+function roomView(game: Game, owner: number, guests: string[], revision: number) {
  const seats = game.names.slice(0, guests.length + 1);
- return { game: publicGame(game, owner), seats, joined: seats.length === game.names.length };
+ return { game: publicGame(game, owner), revision, seats, joined: seats.length === game.names.length };
 }
 
 async function room(req: Request, env: Env) {
@@ -58,7 +58,7 @@ async function room(req: Request, env: Env) {
    await db.prepare('DELETE FROM rooms WHERE expires<?').bind(Date.now()).run();
    await db.prepare('INSERT INTO rooms (code,state,host,revision,expires) VALUES (?,?,?,0,?)')
     .bind(code, JSON.stringify(game), await hash(key), Date.now() + 7 * 86400000).run();
-   return json({code, key, owner:0, ...roomView(game, 0, [])});
+   return json({code, key, owner:0, ...roomView(game, 0, [], 0)});
   }
   if (typeof body.code !== 'string' || !/^[A-F0-9]{12}$/.test(body.code)) {
    return json({error:'Código no válido'}, 400);
@@ -66,13 +66,16 @@ async function room(req: Request, env: Env) {
 
   const key = body.type === 'join' ? token() : String(body.key || '');
   const hashedKey = await hash(key);
+  const knownRevision = body.type === 'poll' && Number.isSafeInteger(body.knownRevision) && body.knownRevision >= 0
+   ? body.knownRevision : null;
   for (let attempt = 0; attempt < MAX_PLAYERS; attempt++) {
-   const stored = await db.prepare('SELECT * FROM rooms WHERE code=?').bind(body.code).first<StoredRoom>();
+   const stored = await db.prepare(
+    'SELECT host,guest,revision,expires,CASE WHEN revision=? THEN NULL ELSE state END AS state FROM rooms WHERE code=?'
+   ).bind(knownRevision, body.code).first<StoredRoom>();
    if (!stored || stored.expires < Date.now()) return json({error:'La sala no existe o ha caducado'}, 404);
    const guests = guestHashes(stored.guest);
-   const game: Game = JSON.parse(stored.state);
-
    if (body.type === 'join') {
+    const game: Game = JSON.parse(stored.state!);
     const owner = guests.length + 1;
     if (owner >= game.names.length) return json({error:'La sala ya está completa'}, 409);
     guests.push(hashedKey);
@@ -81,14 +84,16 @@ async function room(req: Request, env: Env) {
     const guest = game.names.length === 2 ? guests[0] : JSON.stringify(guests);
     const result = await db.prepare('UPDATE rooms SET guest=?,state=?,revision=revision+1 WHERE code=? AND revision=?')
      .bind(guest, JSON.stringify(game), body.code, stored.revision).run();
-    if (result.meta.changes) return json({code:body.code, key, owner, ...roomView(game, owner, guests)});
+    if (result.meta.changes) return json({code:body.code, key, owner, ...roomView(game, owner, guests, stored.revision + 1)});
     continue;
    }
 
    const guestIndex = guests.indexOf(hashedKey);
    const owner = hashedKey === stored.host ? 0 : guestIndex < 0 ? -1 : guestIndex + 1;
    if (owner < 0) return json({error:'No tienes acceso a esta partida'}, 403);
-   if (body.type === 'poll') return json(roomView(game, owner, guests));
+   if (stored.revision === knownRevision) return json({unchanged:true});
+   const game: Game = JSON.parse(stored.state!);
+   if (body.type === 'poll') return json(roomView(game, owner, guests, stored.revision));
    if (body.type !== 'act') return json({error:'Acción desconocida'}, 400);
    if (guests.length + 1 < game.names.length) return json({error:'Espera a que se complete la sala'}, 409);
    const simultaneousPick = body.action?.type === 'select' && game.phase === 'select' && body.action.round === game.round;
@@ -98,7 +103,7 @@ async function room(req: Request, env: Env) {
    const next = act(game, owner, body.action);
    const result = await db.prepare('UPDATE rooms SET state=?,revision=revision+1 WHERE code=? AND revision=?')
     .bind(JSON.stringify(next), body.code, stored.revision).run();
-   if (result.meta.changes) return json(roomView(next, owner, guests));
+   if (result.meta.changes) return json(roomView(next, owner, guests, stored.revision + 1));
    if (!simultaneousPick) break;
   }
   return json({error:'La partida ha cambiado. Vuelve a intentarlo.'}, 409);

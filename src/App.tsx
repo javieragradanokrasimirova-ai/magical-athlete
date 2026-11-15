@@ -1,11 +1,14 @@
-import {useEffect,useState,type CSSProperties,type ReactNode} from 'react';
+import {lazy,Suspense,useEffect,useRef,useState,type CSSProperties,type ReactNode} from 'react';
 import {ArrowRight,BookOpen,Check,Copy,Flag,Layers,Users,X} from 'lucide-react';
 import {RACERS,card,artwork,asset} from './lib/racers';
 import {createGame,act,actor,racersNeeded,MIN_PLAYERS,MAX_PLAYERS,type Game} from './lib/engine';
-import RaceView from './RaceView';
+import './race.css';
+
+const RaceView=lazy(()=>import('./RaceView'));
 
 type Session={code:string;key:string;owner:number};
-type Room={game:Game;joined:boolean;seats?:string[]};
+type Room={game:Game;joined:boolean;seats?:string[];revision?:number};
+type PollResult=Room|{unchanged:true};
 type Mode='local'|'create'|'join';
 const counts=Array.from({length:MAX_PLAYERS-MIN_PLAYERS+1},(_,i)=>i+MIN_PLAYERS);
 const defaultName=(i:number)=>`Jugador ${i+1}`;
@@ -23,15 +26,15 @@ function RacerCard({id,onClick,selected,order,compact=false}:{
  const racer=card(id);
  return <button className={`racer-card ${compact?'compact':''} ${selected?'selected':''}`}
   style={{'--card':racer.color} as CSSProperties} onClick={onClick} aria-pressed={selected}>
-  <strong>{racer.name}</strong><img className="portrait" src={artwork(id)} alt="" loading="lazy"/>
+  <strong>{racer.name}</strong><img className="portrait" src={artwork(id)} alt="" loading="lazy" decoding="async"/>
   {!compact&&<span className="power">{racer.power}</span>}
   {!!order&&<b className="check" aria-label={`Orden ${order}`}>{order}</b>}
  </button>;
 }
 
-function Dialog({title,children,close,wide=false}:{title:string;children:ReactNode;close?:()=>void;wide?:boolean}){
- return <div className="modal-backdrop" onClick={close}>
-  <section className={`modal ${wide?'wide':''}`} role="dialog" aria-label={title} aria-modal="true" onClick={e=>e.stopPropagation()}>
+function Dialog({title,children,close,catalog=false}:{title:string;children:ReactNode;close?:()=>void;catalog?:boolean}){
+ return <div className={catalog?'modal-backdrop catalog-backdrop':'modal-backdrop'} onClick={close}>
+  <section className={`modal ${catalog?'wide':''}`} role="dialog" aria-label={title} aria-modal="true" onClick={e=>e.stopPropagation()}>
    {close&&<button className="close" onClick={close} aria-label="Cerrar"><X size={23}/></button>}
    <h2>{title}</h2>{children}
   </section>
@@ -41,6 +44,7 @@ function Dialog({title,children,close,wide=false}:{title:string;children:ReactNo
 export default function App(){
  const [local,setLocal]=useState<Game|null>(null);
  const [room,setRoom]=useState<Room|null>(null);
+ const latestRoom=useRef<Room|null>(null);
  const [session,setSession]=useState<Session|null>(null);
  const [mode,setMode]=useState<Mode>('local');
  const [size,setSize]=useState(4);
@@ -68,16 +72,27 @@ export default function App(){
   return ()=>window.removeEventListener('keydown',escape);
  },[inspect]);
 
+ function replaceRoom(next:Room|null){
+  latestRoom.current=next;
+  setRoom(next);
+ }
  function updateRoom(next:Room){
-  setRoom(current=>!current||next.game.version>=current.game.version?next:current);
+  const current=latestRoom.current;
+  if(!current||next.game.version>current.game.version)replaceRoom(next);
+  else if(next.game.version===current.game.version&&next.revision!==undefined)latestRoom.current=next;
   setConnected(true);
  }
  useEffect(()=>{
   if(!session||home)return;
   let active=true,timer:ReturnType<typeof setTimeout>;
   async function poll(){
-   try{const next=await api<Room>({type:'poll',...session});if(active)updateRoom(next);}
-   catch{if(active)setConnected(false);}
+   try{
+    const next=await api<PollResult>({type:'poll',...session,knownRevision:latestRoom.current?.revision});
+    if(active){
+     if('unchanged' in next)setConnected(true);
+     else updateRoom(next);
+    }
+   }catch{if(active)setConnected(false);}
    finally{if(active)timer=setTimeout(poll,1500);}
   }
   void poll();
@@ -98,7 +113,7 @@ export default function App(){
  function resume(){
   try{
    const stored=localStorage.getItem('ma-session');
-   if(stored){setRoom(null);setSession(JSON.parse(stored));setCurtain(false);}
+   if(stored){replaceRoom(null);setSession(JSON.parse(stored));setCurtain(false);}
    else{
     const next:Game=JSON.parse(localStorage.getItem('ma-game')!);
     setLocal(next);setSession(null);setCurtain(next.phase==='select');
@@ -119,7 +134,7 @@ export default function App(){
   try{
    const next=await api<Room&Session>({type:mode,name:names[0].trim(),code,size,doubleRacers});
    const seat={code:next.code,key:next.key,owner:next.owner};
-   setSession(seat);setRoom(next);setConnected(true);
+   setSession(seat);replaceRoom(next);setConnected(true);
    localStorage.setItem('ma-session',JSON.stringify(seat));setSaved(true);setHome(false);
   }catch(error){setNotice(error.message);}
   finally{setBusy(false);}
@@ -231,8 +246,8 @@ export default function App(){
       <button className="primary" disabled={busy||selected.length!==picks||g.ready[owner]}
        onClick={()=>action({type:'select',ids:selected})}>Confirmar en secreto <Check size={19}/></button></div>
     </section>}
-    {['race','results','finished'].includes(g.phase)&&<RaceView game={g} owner={owner} online={!!session} canAct={isTurn}
-     busy={busy} action={action} inspect={setInspect} onHome={()=>setHome(true)}/>}
+    {['race','results','finished'].includes(g.phase)&&<Suspense fallback={<p className="loading-room" role="status">Preparando la carrera…</p>}><RaceView game={g} owner={owner} online={!!session} canAct={isTurn}
+     busy={busy} action={action} inspect={setInspect} onHome={()=>setHome(true)}/></Suspense>}
    </>}
   </>}
   <footer><span>Magical Athlete</span>
@@ -242,7 +257,7 @@ export default function App(){
   {curtain&&!home&&g?.phase==='select'&&<Dialog title={`Pasa la pantalla a ${g.names[owner]}`}>
    <p>Las elecciones anteriores quedan ocultas hasta la salida.</p><button className="primary" onClick={()=>setCurtain(false)}>Ya estoy en mi turno <ArrowRight size={18}/></button></Dialog>}
   {inspect?<Dialog title={card(inspect).name} close={()=>setInspect(null)}><img className="giant" src={artwork(inspect)} alt=""/>
-   <p>{card(inspect).power}</p></Dialog>:modal==='catalog'?<Dialog title="Los 36 atletas" close={()=>setModal(null)} wide>
+   <p>{card(inspect).power}</p></Dialog>:modal==='catalog'?<Dialog title="Los 36 atletas" close={()=>setModal(null)} catalog>
    <div className="cards catalog">{RACERS.map(r=><RacerCard key={r.id} id={r.id} onClick={()=>setInspect(r.id)}/>)}</div>
   </Dialog>:modal==='rules'&&<Dialog title="Cómo jugar" close={()=>setModal(null)}>
    <ol className="rules">

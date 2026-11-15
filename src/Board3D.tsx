@@ -8,6 +8,7 @@ import type {OrbitControls as OrbitImpl} from 'three-stdlib';
 import type {Game,Runner} from './lib/engine';
 import {artwork,asset} from './lib/racers';
 import {point} from './Board2D';
+import {movementDuration} from './lib/motionTiming';
 type Command={id:number,kind:string};
 function CameraRig({command,reduced}:{command:Command,reduced:boolean}){
  const controls=useRef<OrbitImpl>(null);
@@ -33,10 +34,41 @@ function Surface({mild}:{mild:boolean}){
  return <><RoundedBox args={[20,.2,6.6]} radius={.08} smoothness={3} position={[0,-.13,0]} castShadow receiveShadow><meshStandardMaterial color="#24251f" roughness={.8}/></RoundedBox><mesh rotation={[-Math.PI/2,0,0]} position={[0,-.019,0]}><planeGeometry args={[20,6.6]}/><meshBasicMaterial map={map} transparent toneMapped={false}/></mesh></>;
 }
 function Piece({r,mild,dx,dz,active,effect,reduced,fast,inspect}:{r:Runner,mild:boolean,dx:number,dz:number,active:boolean,effect:string,reduced:boolean,fast:boolean,inspect:(id:string)=>void}){
- const texture=useTexture(artwork(r.id));const group=useRef<Group>(null),stand=useRef<Group>(null);const {invalidate}=useThree();
- const motion=useRef({from:r.pos,to:r.pos,elapsed:1,duration:0,dx,dz,fromDx:dx,fromDz:dz,trip:r.trip?-Math.PI/2:0,fromTrip:r.trip?-Math.PI/2:0});
- useEffect(()=>{const m=motion.current;const progress=m.duration?Math.min(1,m.elapsed/m.duration):1;const current=m.from+(m.to-m.from)*(1-(1-progress)**3);motion.current={from:current,to:r.pos,elapsed:0,duration:reduced?0:(fast?.45:1)*Math.min(.95,.42+Math.abs(r.pos-current)*.04),dx,dz,fromDx:m.dx,fromDz:m.dz,trip:r.trip?-Math.PI/2:0,fromTrip:stand.current?.rotation.x??0};invalidate()},[r.pos,r.trip,dx,dz,reduced,fast,invalidate]);
- useFrame((_,delta)=>{const m=motion.current;m.elapsed+=Math.min(delta,.1);const t=m.duration?Math.min(1,m.elapsed/m.duration):1,e=1-(1-t)**3;const p=effect==='warp'?(t<.5?m.from:m.to):MathUtils.lerp(m.from,m.to,e);const a=point(Math.floor(p),mild),b=point(Math.min(30,Math.ceil(p)),mild),f=p-Math.floor(p);if(group.current){group.current.position.set((MathUtils.lerp(a[0],b[0],f)-500)/50+MathUtils.lerp(m.fromDx,m.dx,e),.08+(reduced?0:Math.sin(t*Math.PI)*.15),(MathUtils.lerp(a[1],b[1],f)-495)/50+MathUtils.lerp(m.fromDz,m.dz,e));group.current.scale.setScalar(effect==='warp'&&!reduced?Math.max(.06,Math.abs(t-.5)*2):1)}if(stand.current)stand.current.rotation.x=MathUtils.lerp(m.fromTrip,m.trip,e);if(t<1)invalidate()});
+ const texture=useTexture(artwork(r.id));const group=useRef<Group>(null),stand=useRef<Group>(null);const invalidate=useThree(state=>state.invalidate);
+ const currentEffect=useRef(effect);
+ currentEffect.current=effect;
+ const motion=useRef({from:r.pos,to:r.pos,elapsed:0,duration:0,dx,dz,fromDx:dx,fromDz:dz,
+  trip:r.trip?-Math.PI/2:0,fromTrip:r.trip?-Math.PI/2:0,warp:false,settled:false});
+ useEffect(()=>{
+  const m=motion.current;
+  const progress=m.duration?Math.min(1,m.elapsed/m.duration):1;
+  const current=m.warp?(progress<.5?m.from:m.to):MathUtils.lerp(m.from,m.to,1-(1-progress)**3);
+  const trip=r.trip?-Math.PI/2:0;
+  const fromTrip=stand.current?.rotation.x??0;
+  const distance=Math.abs(r.pos-current);
+  const changed=distance>0||dx!==m.dx||dz!==m.dz||trip!==fromTrip;
+  motion.current={from:current,to:r.pos,elapsed:0,
+   duration:reduced||!changed?0:(fast?.45:1)*movementDuration(distance)/1000,
+   dx,dz,fromDx:m.dx,fromDz:m.dz,trip,fromTrip,warp:currentEffect.current==='warp'&&distance>0,settled:false};
+  invalidate();
+ },[r.pos,r.trip,dx,dz,reduced,fast,invalidate]);
+ useFrame((_,delta)=>{
+  const m=motion.current;
+  if(m.settled)return;
+  m.elapsed+=Math.min(delta,.1);
+  const t=m.duration?Math.min(1,m.elapsed/m.duration):1,e=1-(1-t)**3;
+  const p=m.warp?(t<.5?m.from:m.to):MathUtils.lerp(m.from,m.to,e);
+  const a=point(Math.floor(p),mild),b=point(Math.min(30,Math.ceil(p)),mild),f=p-Math.floor(p);
+  if(group.current){
+   group.current.position.set((MathUtils.lerp(a[0],b[0],f)-500)/50+MathUtils.lerp(m.fromDx,m.dx,e),
+    .08+(m.warp||m.from===m.to?0:Math.sin(t*Math.PI)*.15),
+    (MathUtils.lerp(a[1],b[1],f)-495)/50+MathUtils.lerp(m.fromDz,m.dz,e));
+   group.current.scale.setScalar(m.warp&&!reduced?Math.max(.06,Math.abs(t-.5)*2):1);
+  }
+  if(stand.current)stand.current.rotation.x=MathUtils.lerp(m.fromTrip,m.trip,e);
+  m.settled=t===1;
+  if(!m.settled)invalidate();
+ });
  const click=(e:ThreeEvent<MouseEvent>)=>{e.stopPropagation();if(e.delta<5&&!r.out)inspect(r.id)};const color=seatColors[r.owner];
  return <group ref={group} visible={!r.out} onClick={click}><mesh castShadow><cylinderGeometry args={[.38,.43,.14,32]}/><meshStandardMaterial color={color} roughness={.5}/></mesh>{active&&<mesh rotation={[-Math.PI/2,0,0]} position={[0,.083,0]}><ringGeometry args={[.44,.5,40]}/><meshBasicMaterial color="#ffe16a" side={DoubleSide}/></mesh>}<group ref={stand} position={[0,.1,0]}><RoundedBox args={[.72,1.04,.08]} radius={.035} position={[0,.52,0]} castShadow><meshStandardMaterial color={color}/></RoundedBox><mesh position={[0,.52,.045]}><planeGeometry args={[.64,.94]}/><meshBasicMaterial map={texture} toneMapped={false}/></mesh><mesh position={[0,.52,-.045]} rotation={[0,Math.PI,0]}><planeGeometry args={[.64,.94]}/><meshBasicMaterial map={texture} toneMapped={false}/></mesh></group></group>;
 }

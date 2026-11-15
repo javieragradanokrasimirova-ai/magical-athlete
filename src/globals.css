@@ -362,3 +362,6 @@ footer>span { color:var(--yellow) }
  .site-header { min-height:67px }
  .cover h1 { font-size:clamp(56px,17vw,66px); }
 }
+
+.catalog-backdrop { backdrop-filter:none; }
+.catalog-backdrop,.catalog-backdrop .modal,.catalog .racer-card { animation:none; }

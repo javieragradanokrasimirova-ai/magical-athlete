@@ -1,46 +1,11 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {actor,Game,effectivePower,turnRunners} from './lib/engine';
-import {card,artwork,RACERS} from './lib/racers';
+import {card,artwork} from './lib/racers';
 import Board from './Board';
 import {Flag, Gauge, Maximize2, Minimize2, RotateCcw, SkipForward, Sparkles} from 'lucide-react';
-import './race.css';
+import {usePlayback} from './lib/usePlayback';
 import {place,movementHints,racePoints,lastRoll,lastTurnRunner} from './lib/presentation';
-
-function newLines(old:string[],next:string[]){for(let n=Math.min(old.length,next.length);n>0;n--){if(old.slice(-n).every((v,i)=>v===next[i]))return next.slice(n)}return next.slice(-30)}
-function usePlayback(game:Game,reduced:boolean,fast:boolean){
- const [shown,setShown]=useState(game),[playing,setPlaying]=useState(false),[cue,setCue]=useState(''),[effect,setEffect]=useState(''),[rollKey,setRollKey]=useState(0);
- const [request,setRequest]=useState(0),[replaying,setReplaying]=useState(false);
- const pair=useRef<{old:Game,next:Game}|null>(null),skipRef=useRef(false),wake=useRef<(()=>void)|null>(null);
- const current=useRef(game),seen=useRef(game.version),pending=useRef<Game[]>([]),running=useRef(false),alive=useRef(true),settings=useRef({reduced,fast});settings.current={reduced,fast};
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;wake.current?.()}},[]);
- useEffect(()=>{if(game.version!==seen.current){seen.current=game.version;pending.current.push(game)}if(!pending.current.length)return;
-  async function pump(){if(running.current)return;running.current=true;while(pending.current.length&&alive.current){const next=pending.current.shift()!,old=current.current;
-   if(next.round!==old.round||old.phase!=='race'||settings.current.reduced){current.current=next;setShown(next);setCue('');continue}
-   const lines=newLines(old.log,next.log);if(lines.some(line=>/saca|se mueve|se teletransporta|intercambia|llega|tropieza|gana|elimina/.test(line)))pair.current={old,next};let stage=structuredClone(old);setPlaying(true);
-   for(const line of lines){if(!alive.current)return;if(settings.current.reduced||skipRef.current)break;const c=RACERS.find(c=>line.startsWith(c.name+' '));const r=stage.runners.find(r=>r.id===c?.id);let duration=330,kind='power';
-    if(r){const moved=line.match(/ (se mueve|se teletransporta) de (\d+) a (\d+)/);const rolled=line.match(/ saca (\d)/);
-     if(moved){r.pos=Number(moved[3]);kind=moved[1]==='se mueve'?'move':'warp';duration=Math.min(950,420+Math.abs(Number(moved[3])-Number(moved[2]))*40)}
-     else if(rolled){stage.roll=Number(rolled[1]);setRollKey(k=>k+1);kind='roll';duration=900}
-     else if(line.includes('intercambia posición con ')){const other=stage.runners.find(a=>line.includes('intercambia posición con '+card(a.id).name));if(other){const pos=other.pos;other.pos=r.pos;r.pos=pos}kind='warp';duration=750}
-     else if(line.includes(' tropieza.')){r.trip=true;kind='trip';duration=650}
-     else if(line.includes('se recupera')){r.trip=false;kind='recover'}
-     else if(line.includes(' llega ')){r.pos=30;r.finished=true;kind='finish';duration=850}
-     else if(line.includes(' elimina a ')){const target=stage.runners.find(a=>line.includes('elimina a '+card(a.id).name));if(target)target.out=true;kind='eliminate';duration=650}
-     else if(line.startsWith('Turno de ')){kind='turn'}
-     stage.active=r.id;
-    }
-    if(line.startsWith('Turno de ')){stage.roll=null;const a=stage.runners.find(r=>line===`Turno de ${card(r.id).name}.`);if(a)stage.active=a.id;kind='turn'}
-    stage.log=[...stage.log,line].slice(-160);setCue(line);setEffect(kind);setShown(structuredClone(stage));
-    await new Promise<void>(resolve=>{const timer=setTimeout(done,settings.current.fast?duration*.45:duration);function done(){clearTimeout(timer);wake.current=null;resolve()}wake.current=done});
-   }
-   current.current=next;setShown(next);setCue(lines.filter(line=>/se mueve|se teletransporta|tropieza|llega|gana|elimina/.test(line)).slice(-1)[0]||'');setEffect('');
-  }running.current=false;skipRef.current=false;if(alive.current){setPlaying(false);setReplaying(false)}}pump();
- },[game.version,game,request]);
- function skip(){skipRef.current=true;wake.current?.()}
- function replay(){if(!pair.current||running.current)return;skipRef.current=false;current.current=pair.current.old;setShown(pair.current.old);pending.current.push(pair.current.next);setPlaying(true);setReplaying(true);setRequest(n=>n+1)}
- return {shown,playing:playing||shown.version!==game.version,cue,effect,rollKey,skip,replay,replaying,canReplay:!!pair.current};
-}
 
 function Counter({value}:{value:number}){const [n,setN]=useState(value);const last=useRef(value);useEffect(()=>{const from=last.current;last.current=value;let id=0;const start=performance.now();const tick=(t:number)=>{const p=Math.min(1,(t-start)/500);setN(Math.round(from+(value-from)*(1-(1-p)**3)));if(p<1)id=requestAnimationFrame(tick)};id=requestAnimationFrame(tick);return()=>cancelAnimationFrame(id)},[value]);return <>{n}</>}
 const dots:Record<number,number[]>={1:[5],2:[1,9],3:[1,5,9],4:[1,3,7,9],5:[1,3,5,7,9],6:[1,3,4,6,7,9]};

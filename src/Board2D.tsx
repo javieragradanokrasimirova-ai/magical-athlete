@@ -2,6 +2,7 @@ import {seatColors} from './lib/presentation';
 import {useEffect,useRef,useState} from 'react';
 import {Game,Runner} from './lib/engine';
 import {artwork,card,asset} from './lib/racers';
+import {movementDuration} from './lib/motionTiming';
 const wildPoint=(i:number)=>i===0?[112,402]:i<=12?[246+(i-1)*63.6,402]:i<=15?[946,402+(i-12)*64]:i<=29?[946-(i-15)*63.6,594]:[56,531];
 // The English rulebook splits Mild Mile into adjacent 934px and 665px images.
 const MILD_SCALE=960/1599;
@@ -9,10 +10,19 @@ export function point(i:number,mild=false){if(!mild)return wildPoint(i);const p=
 
 function Token({r,active,dx,dy,effect,reduced,fast,inspect,mild}:{r:Runner,active:boolean,dx:number,dy:number,effect:string,reduced:boolean,fast:boolean,inspect:(id:string)=>void,mild:boolean}){
  const [frame,setFrame]=useState({x:point(r.pos,mild)[0]+dx,y:point(r.pos,mild)[1]+dy-8,angle:r.trip?72:0,scale:1,hop:0});
- const previous=useRef({pos:r.pos,dx,dy,trip:r.trip});
- useEffect(()=>{const old=previous.current;previous.current={pos:r.pos,dx,dy,trip:r.trip};const start=performance.now(),distance=Math.abs(r.pos-old.pos);const duration=reduced?0:(fast?.45:1)*Math.min(950,420+distance*40);const warp=effect==='warp'&&distance>0;let raf=0;
+ const previous=useRef({pos:r.pos,dx,dy,trip:r.trip,mild});
+ const currentEffect=useRef(effect);
+ currentEffect.current=effect;
+ useEffect(()=>{
+ const old=previous.current;
+ previous.current={pos:r.pos,dx,dy,trip:r.trip,mild};
+ const distance=Math.abs(r.pos-old.pos);
+ const changed=distance>0||old.dx!==dx||old.dy!==dy||old.trip!==r.trip||old.mild!==mild;
+ const start=performance.now(),duration=reduced||!changed?0:(fast?.45:1)*movementDuration(distance);
+ const warp=currentEffect.current==='warp'&&distance>0;
+ let raf=0;
  const tick=(time:number)=>{const t=duration?Math.min(1,(time-start)/duration):1,ease=1-(1-t)**3;const p=warp?(t<.5?old.pos:r.pos):old.pos+(r.pos-old.pos)*ease;const low=Math.floor(p),high=Math.min(30,Math.ceil(p)),fraction=p-low;const a=point(low,mild),b=point(high,mild);setFrame({x:a[0]+(b[0]-a[0])*fraction+old.dx+(dx-old.dx)*ease,y:a[1]+(b[1]-a[1])*fraction+old.dy+(dy-old.dy)*ease-8,angle:(old.trip?72:0)+((r.trip?72:0)-(old.trip?72:0))*ease,scale:warp?Math.max(.05,Math.abs(t-.5)*2):1,hop:distance&&!warp?Math.sin(t*Math.PI)*-13:0});if(t<1)raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf)
- },[r.pos,r.trip,dx,dy,effect,reduced,fast,mild]);
+ },[r.pos,r.trip,dx,dy,reduced,fast,mild]);
  return <g className={`athlete-piece ${active?'piece-active':''} ${r.out?'piece-eliminated':''}`} data-runner={r.id} role="button" tabIndex={r.out?-1:0} aria-hidden={r.out} aria-label={`${card(r.id).name}, casilla ${r.pos}`} onClick={()=>inspect(r.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inspect(r.id)}}} transform={`translate(${frame.x},${frame.y})`}>
  <ellipse className="piece-shadow" cx="0" cy="22" rx="24" ry="7"/>{active&&<ellipse className="piece-ring" cx="0" cy="22" rx="29" ry="11"/>}
  <g transform={`translate(0,${frame.hop}) rotate(${frame.angle}) scale(${frame.scale})`}><path d="M-23 21H23L19 28H-19Z" fill={seatColors[r.owner]}/><rect x="-22" y="-36" width="44" height="58" rx="8" fill={seatColors[r.owner]} stroke="#fff9e9" strokeWidth="2"/><image href={artwork(r.id)} x="-19" y="-33" width="38" height="49" preserveAspectRatio="xMidYMid slice"/><circle cx="15" cy="-32" r="7" fill={seatColors[r.owner]} stroke="#fff" strokeWidth="2"/>{r.finished&&<text x="0" y="-47" textAnchor="middle" fontSize="23">★</text>}</g></g>

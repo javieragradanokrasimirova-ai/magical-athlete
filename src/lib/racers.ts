@@ -39,4 +39,4 @@ export const RACERS = [
 export const card=(id:string)=>RACERS.find(r=>r.id===id)!;
 const files:Record<string,string>={baba:'baba-yaga',cheer:'cheerleader',copy:'copycat',merchant:'dicemonger',flip:'flip-flop',baby:'huge-baby',worm:'inchworm',toad:'leaptoad',loser:'lovable-loser',party:'party-animal',rocket:'rocket-scientist',sucker:'suckerfish',third:'third-wheel'};
 export const asset=(p:string)=>import.meta.env.BASE_URL+p;
-export const artwork=(id:string)=>asset(`athletes/${files[id]||id}.png`);
+export const artwork=(id:string)=>asset(`athletes/${files[id]||id}.webp`);
