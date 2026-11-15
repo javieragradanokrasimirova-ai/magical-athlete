@@ -24,6 +24,6 @@ npm run build
 
 Desplegar el Worker: crear una base D1, poner su `database_id` en `worker/wrangler.toml`, aplicar `worker/schema.sql` y ejecutar `npm run worker:deploy`. La URL del Worker se define en `.github/workflows/deploy.yml` (`VITE_API_URL`) y los orígenes permitidos en `worker/src/index.ts`.
 
-## Cómo se hizo
+## Autoría
 
-Proyecto personal de Javier Agradano Krasimirova. Desarrollado con asistentes de IA bajo mi dirección: yo definí la idea y las decisiones de producto, y revisé y probé cada cambio.
+Proyecto personal de Javier Agradano Krasimirova.
