@@ -13,7 +13,7 @@ type Command={id:number,kind:string};
 function CameraRig({command,reduced}:{command:Command,reduced:boolean}){
  const controls=useRef<OrbitImpl>(null);
  const {camera,size,invalidate}=useThree();
- const distance=Math.max(22,11.5/(Math.tan(MathUtils.degToRad(19))*Math.max(.5,size.width/size.height)));
+ const distance=Math.max(18.5,11.5/(Math.tan(MathUtils.degToRad(19))*Math.max(.5,size.width/size.height)));
  useEffect(()=>{camera.position.set(0,distance*.68,distance*.74);camera.lookAt(0,0,0);controls.current?.target.set(0,0,0);controls.current?.update();invalidate()},[camera,distance,invalidate]);
  useEffect(()=>{const c=controls.current;if(!c)return;const offset=camera.position.clone().sub(c.target);
   if(command.kind==='reset'){c.target.set(0,0,0);camera.position.set(0,distance*.68,distance*.74)}
@@ -74,9 +74,10 @@ function Piece({r,mild,dx,dz,active,effect,reduced,fast,inspect}:{r:Runner,mild:
 }
 function ContextGuard({failed}:{failed:()=>void}){const gl=useThree(s=>s.gl);useEffect(()=>{const canvas=gl.domElement;const lost=(e:Event)=>{e.preventDefault();failed()};canvas.addEventListener('webglcontextlost',lost);return()=>canvas.removeEventListener('webglcontextlost',lost)},[gl,failed]);return null}
 export default function Board3D({game:g,inspect,effect='',reduced=false,fast=false,follow=false,fallback}:{game:Game,inspect:(id:string)=>void,effect?:string,reduced?:boolean,fast?:boolean,follow?:boolean,fallback:ReactNode}){
+ const felt=g.round%2===0?'#7960ae':'#bc5f58';
  const [command,setCommand]=useState<Command>({id:0,kind:'reset'}),[failed,setFailed]=useState(false);if(failed)return <>{fallback}</>;
  return <div className={`tabletop ${follow?'tabletop-expanded':''}`}><div className="tabletop-canvas" role="group" aria-label="Tablero 3D. Arrastra para girar y usa los controles para acercar o restablecer la vista."><Canvas frameloop="demand" dpr={[1,1.5]} camera={{position:[0,20,24],fov:38,near:.1,far:160}} shadows="percentage">
- <color attach="background" args={['#e9e4d5']}/><ambientLight intensity={1.6}/><directionalLight position={[-8,16,8]} intensity={2.4} castShadow shadow-mapSize={[1024,1024]} shadow-camera-left={-15} shadow-camera-right={15} shadow-camera-top={12} shadow-camera-bottom={-12} shadow-normalBias={.04}/><mesh rotation={[-Math.PI/2,0,0]} position={[0,-.26,0]} receiveShadow><planeGeometry args={[200,200]}/><meshStandardMaterial color="#e9e4d5" roughness={1}/></mesh><Surface mild={g.round%2===0}/>
+ <color attach="background" args={[felt]}/><ambientLight intensity={1.6}/><directionalLight position={[-8,16,8]} intensity={2.4} castShadow shadow-mapSize={[1024,1024]} shadow-camera-left={-15} shadow-camera-right={15} shadow-camera-top={12} shadow-camera-bottom={-12} shadow-normalBias={.04}/><mesh rotation={[-Math.PI/2,0,0]} position={[0,-.26,0]} receiveShadow><planeGeometry args={[200,200]}/><shadowMaterial opacity={.24}/></mesh><Surface mild={g.round%2===0}/>
  {g.runners.map(r=>{const same=g.runners.filter(a=>a.pos===r.pos&&!a.out),j=Math.max(0,same.indexOf(r));const columns=r.pos===0?3:2,row=Math.floor(j/columns),rowCount=Math.min(columns,same.length-row*columns);const dx=(j%columns-(rowCount-1)/2)*.72,dz=row*(r.pos<=12?.65:-.65);return <Piece key={`${g.round}-${r.id}`} r={r} mild={g.round%2===0} dx={dx} dz={dz} active={g.active===r.id} effect={effect} reduced={reduced} fast={fast} inspect={inspect}/>})}<CameraRig command={command} reduced={reduced}/><ContextGuard failed={()=>setFailed(true)}/></Canvas></div>
  <div className="tabletop-tools" role="group" aria-label="Cámara del tablero">{[['left','Girar izquierda','↶'],['right','Girar derecha','↷'],['in','Acercar','＋'],['out','Alejar','−'],['top','Vista desde arriba','Desde arriba'],['reset','Restablecer vista','Restablecer']].map(([kind,label,text])=><button key={kind} aria-label={label} onClick={()=>setCommand(c=>({id:c.id+1,kind}))}>{text}</button>)}</div><p className="tabletop-help">Arrastra para girar · Rueda o pellizca para acercar · Pulsa una ficha para ver su poder</p></div>;
 }

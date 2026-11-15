@@ -35,8 +35,12 @@ function RacerCard({id,onClick,selected,order,compact=false}:{
 function Dialog({title,children,close,catalog=false}:{title:string;children:ReactNode;close?:()=>void;catalog?:boolean}){
  return <div className={catalog?'modal-backdrop catalog-backdrop':'modal-backdrop'} onClick={close}>
   <section className={`modal ${catalog?'wide':''}`} role="dialog" aria-label={title} aria-modal="true" onClick={e=>e.stopPropagation()}>
-   {close&&<button className="close" onClick={close} aria-label="Cerrar"><X size={23}/></button>}
-   <h2>{title}</h2>{children}
+   {catalog?<><div className="catalog-heading">
+    <h2 id="catalog-title">{title}</h2>
+    {close&&<button className="close" onClick={close} aria-label="Cerrar"><X size={23}/></button>}
+   </div><div className="catalog-scroll" role="region" aria-labelledby="catalog-title" tabIndex={0}>{children}</div></>:
+   <>{close&&<button className="close" onClick={close} aria-label="Cerrar"><X size={23}/></button>}
+    <h2>{title}</h2>{children}</>}
   </section>
  </div>;
 }
